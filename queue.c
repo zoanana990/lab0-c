@@ -30,6 +30,13 @@ struct list_head *q_new()
 /* Free all storage used by queue */
 void q_free(struct list_head *l)
 {
+    if (!l)
+        return;
+    struct list_head *curr;
+    list_for_each (curr, l) {
+        element_t *q = list_entry(curr, element_t, list);
+        q_release_element(q);
+    }
     free(l);
 }
 
@@ -186,6 +193,7 @@ bool q_delete_dup(struct list_head *head)
     // Leetcode 82:
     // https://leetcode.com/problems/remove-duplicates-from-sorted-list-ii/
 
+
     return true;
 }
 
@@ -194,6 +202,7 @@ bool q_delete_dup(struct list_head *head)
  */
 void q_swap(struct list_head *head)
 {
+    // Leetcode 24:
     // https://leetcode.com/problems/swap-nodes-in-pairs/
 }
 

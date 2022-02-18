@@ -33,10 +33,8 @@ void q_free(struct list_head *l)
     if (!l)
         return;
     struct list_head *curr;
-    list_for_each (curr, l) {
-        element_t *q = list_entry(curr, element_t, list);
-        q_release_element(q);
-    }
+    list_for_each (curr, l)
+        q_release_element(list_entry(curr, element_t, list));
     free(l);
 }
 

@@ -8,7 +8,7 @@
 /* Notice: sometimes, Cppcheck would find the potential NULL pointer bugs,
  * but some of them cannot occur. You can suppress them by adding the
  * following line.
- *   cppcheck-suppress nullPointer
+ * cppcheck-suppress nullPointer
  */
 
 /*
@@ -17,14 +17,17 @@
  */
 struct list_head *q_new()
 {
-    // element_t *q = malloc(sizeof(element_t));
+    // make an element
+    struct list_head *l = malloc(sizeof(struct list_head));
 
-    // if(!q) return NULL;
+    // if not malloc memory
+    if (!l)
+        return NULL;
 
-    // INIT_LIST_HEAD(&q->list);
+    // Initial the list node
+    INIT_LIST_HEAD(l);
 
-    // return &q->list;
-    return NULL;
+    return l;
 }
 
 /* Free all storage used by queue */
@@ -39,6 +42,23 @@ void q_free(struct list_head *l)
 }
 
 /*
+ * Due to the repeated code in q_insert_head and q_insert_tail
+ * write a functionto replace them
+ */
+
+element_t *q_insert(char *s)
+{
+    element_t *q = malloc(sizeof(element_t));
+    if (!q)
+        return NULL;
+    q->value = malloc(sizeof(char) * (strlen(s) + 1));
+    // if(!q->value)
+    //     return NULL;
+    strncpy(q->value, s, strlen(s));
+    q->value[strlen(s)] = '\0';
+    return q;
+}
+/*
  * Attempt to insert element at head of queue.
  * Return true if successful.
  * Return false if q is NULL or could not allocate space.
@@ -52,11 +72,12 @@ bool q_insert_head(struct list_head *head, char *s)
         return false;
 
     // make a new element
-    element_t *q_head = malloc(sizeof(element_t));
-    q_head->value = malloc(sizeof(char) * (strlen(s) + 1));
-    strncpy(q_head->value, s, strlen(s));
+    element_t *q_head = q_insert(s);
 
-    list_add(head, &q_head->list);
+    if (!q_head)
+        return false;
+    INIT_LIST_HEAD(&q_head->list);
+    list_add(&q_head->list, head);
 
     return true;
 }
@@ -75,12 +96,13 @@ bool q_insert_tail(struct list_head *head, char *s)
         return false;
 
     // make a new element
-    element_t *q_head = malloc(sizeof(element_t));
-    q_head->value = malloc(sizeof(char) * (strlen(s) + 1));
-    strncpy(q_head->value, s, strlen(s));
+    element_t *q_tail = q_insert(s);
+
+    if (!q_tail)
+        return false;
 
 
-    list_add_tail(&q_head->list, head);
+    list_add_tail(&q_tail->list, head);
 
     return true;
 }
@@ -101,14 +123,16 @@ bool q_insert_tail(struct list_head *head, char *s)
  */
 element_t *q_remove_head(struct list_head *head, char *sp, size_t bufsize)
 {
-    if (!head)
-        return NULL;
-    element_t *q_head =
-        malloc(sizeof(struct list_head) + sizeof(char *) * (bufsize + 1));
-    q_head->value = sp;
-    q_head->list = *head;
+    // if (!head || list_empty(head))
+    //     return NULL;
+    element_t *q_head = list_first_entry(head, element_t, list);
+    list_del_init(&q_head->list);
 
-    list_del(head);
+    // copy the q_head->value to the sp
+    if (sp) {
+        strncpy(sp, q_head->value, bufsize - 1);
+        sp[bufsize - 1] = '\0';
+    }
 
     return q_head;
 }
@@ -119,14 +143,18 @@ element_t *q_remove_head(struct list_head *head, char *sp, size_t bufsize)
  */
 element_t *q_remove_tail(struct list_head *head, char *sp, size_t bufsize)
 {
-    if (!head)
-        return NULL;
-    element_t *q_head =
-        malloc(sizeof(struct list_head) + sizeof(char *) * (bufsize + 1));
-    q_head->value = sp;
+    // if (!head)
+    //     return NULL;
+    element_t *q_tail = list_entry(head->prev, element_t, list);
+    list_del_init(&q_tail->list);
 
-    list_del(&q_head->list);
-    return q_head;
+    // copy the q_head->value to the sp
+    if (sp) {
+        strncpy(sp, q_tail->value, bufsize - 1);
+        sp[bufsize - 1] = '\0';
+    }
+
+    return q_tail;
 }
 
 /*
@@ -171,9 +199,12 @@ bool q_delete_mid(struct list_head *head)
     if (!head)
         return false;
     struct list_head *fast, **slow = &head;
-    for (fast = NULL; fast->next != head; fast = fast->next->next)
+    for (fast = NULL; fast->next != head || fast->next->next != head;
+         fast = fast->next->next)
         slow = &(*slow)->next;
-    list_del((*slow)->next);
+    if (*slow)
+        q_release_element(list_entry((*slow), element_t, list));
+    list_del((*slow));
     return true;
 }
 
@@ -191,7 +222,31 @@ bool q_delete_dup(struct list_head *head)
     // Leetcode 82:
     // https://leetcode.com/problems/remove-duplicates-from-sorted-list-ii/
 
+    // Boundary Condition
+    if (!head)
+        return false;
 
+    // indirect pointer and get the queue of this node
+    struct list_head **indirect = &head;
+    element_t *q = list_entry(*indirect, element_t, list);
+
+    while (*indirect != head || (*indirect)->next != head) {
+        element_t *q_next = list_entry((*indirect)->next, element_t, list);
+
+        // if it is duplicate node
+        if ((*indirect)->next && strcmp(q_next->value, q->value)) {
+            struct list_head *temp = *indirect;
+            element_t *q_temp = list_entry(temp, element_t, list);
+            while (temp && strcmp(q_temp->value, q->value)) {
+                q_release_element(list_entry(temp, element_t, list));
+                temp = temp->next;
+            }
+            *indirect = temp;
+        }
+        // normal traversal
+        else
+            indirect = &(*indirect)->next;
+    }
     return true;
 }
 
@@ -202,6 +257,23 @@ void q_swap(struct list_head *head)
 {
     // Leetcode 24:
     // https://leetcode.com/problems/swap-nodes-in-pairs/
+    // struct list_head **indirect = &head, *future = NULL, *current;
+    // while (*indirect != head || (*indirect)->next != head) {
+    //     current = *indirect;
+    //     future = (*indirect)->next;
+
+    //     // swap two node
+    //     current->next = future->next;
+    //     future->prev = current->prev;
+    //     future->next = current;
+    //     current->prev = future;
+
+    //     // Substitute the position
+    //     *indirect = future;
+
+    //     // go next two node
+    //     indirect = &(current->next);
+    // }
 }
 
 /*
@@ -211,7 +283,20 @@ void q_swap(struct list_head *head)
  * (e.g., by calling q_insert_head, q_insert_tail, or q_remove_head).
  * It should rearrange the existing ones.
  */
-void q_reverse(struct list_head *head) {}
+void q_reverse(struct list_head *head)
+{
+    if (!head)
+        return;
+
+    struct list_head *curr = head, *prev = head->prev, *next = NULL;
+    while (next != head) {
+        next = curr->next;
+        curr->next = prev;
+        curr->prev = next;
+        prev = curr;
+        curr = next;
+    }
+}
 
 /*
  * Sort elements of queue in ascending order
@@ -219,3 +304,29 @@ void q_reverse(struct list_head *head) {}
  * element, do nothing.
  */
 void q_sort(struct list_head *head) {}
+
+// int main(){
+//     struct list_head *l = q_new();
+
+//     // q_insert_head(l, "gerbil");
+//     // q_insert_head(l, "bear");
+//     // q_insert_head(l, "dolphin");
+//     // q_insert_head(l, "dolphin");
+//     q_insert_head(l, "dolphin");
+//     // q_insert_tail(l, "meerkat");
+//     // q_insert_tail(l, "bear");
+//     // q_insert_tail(l, "gerbil");
+//     // q_insert_tail(l, "tiger");
+//     element_t *q1 = q_remove_head(l, "dolphin", sizeof("dolphin"));
+//     // q_delete_dup(l);
+
+//     // printf("%ld\n", sizeof("tiger"));
+
+//     // print
+//     // struct list_head *node = l;
+//     // list_for_each(node, l){
+//     //     element_t *q = list_entry(node, element_t, list);
+//     //     printf("%s\n", q->value);
+//     // }
+//     return 0;
+// }

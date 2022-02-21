@@ -215,47 +215,28 @@ bool q_delete_mid(struct list_head *head)
  */
 bool q_delete_dup(struct list_head *head)
 {
-    // // Boundary Condition
-    // if (!head || list_empty(head))
-    //     return false;
+    if (!head || list_empty(head) || list_is_singular(head))
+        return false;
 
-    // // indirect pointer and get the queue of this node
-    // struct list_head *curr = head->next, *prev = head;
-
-    // while (curr != head && curr->next != head) {
-
-    //     element_t *q_curr = list_entry(curr, element_t, list);
-    //     element_t *q_next = list_entry(curr->next, element_t, list);
-
-    //     // if it is duplicate node
-    //     if (curr->next && strcmp(q_next->value, q_curr->value)) {
-
-    //         struct list_head *temp = curr;
-    //         element_t *q_temp = list_entry(temp, element_t, list);
-
-    //         while (temp && strcmp(q_temp->value, q_curr->value)) {
-    //             struct list_head *prev = temp;
-    //             temp = temp->next;
-
-    //             // take out the node and delete queue
-    //             list_del(prev);
-    //             q_release_element(list_entry(prev, element_t, list));
-
-    //             // update the list entry
-    //             q_temp = list_entry(temp, element_t, list);
-    //         }
-
-    //         curr = temp;
-    //         curr->prev = prev;
-    //         prev->next = curr;
-    //     }
-
-    //     // normal traversal
-    //     else{
-    //         curr = curr->next;
-    //     }
-
-    // }
+    struct list_head *prev = NULL, *curr = head->next, *next = curr->next;
+    while (curr != head && next != head) {
+        element_t *q_curr = list_entry(curr, element_t, list);
+        element_t *q_next = list_entry(next, element_t, list);
+        while (next != head && !strcmp(q_curr->value, q_next->value)) {
+            prev = curr;
+            list_del(next);
+            q_release_element(list_entry(next, element_t, list));
+            next = curr->next;
+            q_next = list_entry(next, element_t, list);
+        }
+        if (prev) {
+            list_del(prev);
+            q_release_element(list_entry(prev, element_t, list));
+            prev = NULL;
+        }
+        curr = next;
+        next = curr->next;
+    }
     return true;
 }
 

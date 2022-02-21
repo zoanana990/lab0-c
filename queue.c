@@ -27,7 +27,6 @@ struct list_head *q_new()
 
     // Initial the list node
     INIT_LIST_HEAD(l);
-
     return l;
 }
 
@@ -36,9 +35,13 @@ void q_free(struct list_head *l)
 {
     if (!l)
         return;
-    struct list_head *curr;
-    list_for_each (curr, l)
-        q_release_element(list_entry(curr, element_t, list));
+    struct list_head *curr = l->next;
+    while (curr != l) {
+        struct list_head *prev = curr;
+        curr = curr->next;
+        list_del(prev);
+        q_release_element(list_entry(prev, element_t, list));
+    }
     free(l);
 }
 
@@ -50,15 +53,18 @@ void q_free(struct list_head *l)
 element_t *q_insert(char *s)
 {
     element_t *q = malloc(sizeof(element_t));
-    if (!q)
+    if (q == NULL) {
         return NULL;
-    q->value = malloc(sizeof(char) * (strlen(s) + 1));
+    }
+
+    int len = strlen(s) + 1;
+    q->value = malloc(sizeof(char) * len);
     if (!q->value) {
         free(q);
         return NULL;
     }
-    strncpy(q->value, s, strlen(s));
-    q->value[strlen(s)] = '\0';
+    strncpy(q->value, s, len - 1);
+    q->value[len - 1] = '\0';
     return q;
 }
 /*
@@ -78,9 +84,8 @@ bool q_insert_head(struct list_head *head, char *s)
     element_t *q = q_insert(s);
 
     if (!q)
-        return NULL;
+        return false;
 
-    // INIT_LIST_HEAD(&q_head->list);
     list_add(&q->list, head);
 
     return true;
@@ -103,7 +108,7 @@ bool q_insert_tail(struct list_head *head, char *s)
     element_t *q = q_insert(s);
 
     if (!q)
-        return s;
+        return false;
 
     list_add_tail(&q->list, head);
 
@@ -186,8 +191,6 @@ int q_size(struct list_head *head)
  */
 bool q_delete_mid(struct list_head *head)
 {
-    // https://leetcode.com/problems/delete-the-middle-node-of-a-linked-list/
-
     if (!head || list_empty(head))
         return false;
 
@@ -212,32 +215,48 @@ bool q_delete_mid(struct list_head *head)
  */
 bool q_delete_dup(struct list_head *head)
 {
-    // Boundary Condition
-    if (!head || list_empty(head))
-        return false;
+    // // Boundary Condition
+    // if (!head || list_empty(head))
+    //     return false;
 
-    // indirect pointer and get the queue of this node
-    struct list_head **indirect = &head->next;
+    // // indirect pointer and get the queue of this node
+    // struct list_head *curr = head->next, *prev = head;
 
-    while (*indirect != head && (*indirect)->next != head) {
-        element_t *q = list_entry(*indirect, element_t, list);
-        element_t *q_next = list_entry((*indirect)->next, element_t, list);
+    // while (curr != head && curr->next != head) {
 
-        // if it is duplicate node
-        if ((*indirect)->next && strcmp(q_next->value, q->value)) {
-            struct list_head *temp = *indirect;
-            element_t *q_temp = list_entry(temp, element_t, list);
-            while (temp && strcmp(q_temp->value, q->value)) {
-                q_release_element(list_entry(temp, element_t, list));
-                temp = temp->next;
-            }
-            *indirect = temp;
-        }
-        // normal traversal
-        else
-            indirect = &(*indirect)->next;
-    }
-    return true;
+    //     element_t *q_curr = list_entry(curr, element_t, list);
+    //     element_t *q_next = list_entry(curr->next, element_t, list);
+
+    //     // if it is duplicate node
+    //     if (curr->next && strcmp(q_next->value, q_curr->value)) {
+
+    //         struct list_head *temp = curr;
+    //         element_t *q_temp = list_entry(temp, element_t, list);
+
+    //         while (temp && strcmp(q_temp->value, q_curr->value)) {
+    //             struct list_head *prev = temp;
+    //             temp = temp->next;
+
+    //             // take out the node and delete queue
+    //             list_del(prev);
+    //             q_release_element(list_entry(prev, element_t, list));
+
+    //             // update the list entry
+    //             q_temp = list_entry(temp, element_t, list);
+    //         }
+
+    //         curr = temp;
+    //         curr->prev = prev;
+    //         prev->next = curr;
+    //     }
+
+    //     // normal traversal
+    //     else{
+    //         curr = curr->next;
+    //     }
+
+    // }
+    // return true;
 }
 
 /*
@@ -245,8 +264,6 @@ bool q_delete_dup(struct list_head *head)
  */
 void q_swap(struct list_head *head)
 {
-    // Leetcode 24:
-    // https://leetcode.com/problems/swap-nodes-in-pairs/
     struct list_head **indirect = &head->next, *future = NULL, *current = NULL;
     while (*indirect != head && (*indirect)->next != head) {
         current = *indirect;
@@ -314,9 +331,9 @@ struct list_head *merge(struct list_head *left, struct list_head *right)
 
 struct list_head *MergeSort(struct list_head *head)
 {
-    if (!head || list_empty(head))
+    if (!head || !head->next)
         return head;
-    struct list_head *fast = head, *slow = head;
+    struct list_head *fast = head->next, *slow = head;
     for (; fast && fast->next; fast = fast->next->next)
         slow = slow->next;
     struct list_head *next = slow->next;
@@ -324,13 +341,20 @@ struct list_head *MergeSort(struct list_head *head)
 
     return merge(MergeSort(head), MergeSort(next));
 }
+
 void q_sort(struct list_head *head)
 {
+    if (!head || list_empty(head))
+        return;
     head->prev->next = NULL;
     head->next = MergeSort(head->next);
+
     struct list_head *curr, *prev = head;
     list_for_each (curr, head) {
         curr->prev = prev;
         prev = curr;
     }
+
+    prev->next = head;
+    head->prev = prev;
 }

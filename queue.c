@@ -256,7 +256,7 @@ bool q_delete_dup(struct list_head *head)
     //     }
 
     // }
-    // return true;
+    return true;
 }
 
 /*

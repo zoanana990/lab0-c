@@ -320,7 +320,7 @@ struct list_head *merge(struct list_head *left, struct list_head *right)
     for (node = NULL; left && right; *node = (*node)->next) {
         element_t *q_left = list_entry(left, element_t, list);
         element_t *q_right = list_entry(right, element_t, list);
-        node = strcmp(q_left->value, q_right->value) ? &left : &right;
+        node = strcmp(q_left->value, q_right->value) < 0 ? &left : &right;
         *ptr = *node;
         ptr = &(*ptr)->next;
     }
@@ -350,7 +350,7 @@ void q_sort(struct list_head *head)
     head->next = MergeSort(head->next);
 
     struct list_head *curr, *prev = head;
-    list_for_each (curr, head) {
+    for (curr = head->next; curr; curr = curr->next) {
         curr->prev = prev;
         prev = curr;
     }

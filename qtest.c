@@ -614,8 +614,14 @@ bool do_sort(int argc, char *argv[])
     error_check();
 
     set_noallocate_mode(true);
-    if (exception_setup(true))
+    if (exception_setup(true)) {
+        clock_t t_begin = clock();
         q_sort(l_meta.l);
+        clock_t t_end = clock();
+        printf("** Consumed: %f secs\n **",
+               (t_end - t_begin) / (double) (CLOCKS_PER_SEC));
+    }
+
     exception_cancel();
     set_noallocate_mode(false);
 
@@ -762,28 +768,218 @@ static bool do_show(int argc, char *argv[])
     return show_queue(0);
 }
 
-// bool do_hello(int argc, char *argv[]){
-//     return (bool) printf("Hello World\n");
-// }
-// bool shuffle(struct list_head *l, size_t size){
-//     if(size < 2) return false;
-//     struct list_head *tail = l->prev;
-//     for(size_t i=size; i>0; i--){
-//         size_t index = rand()%i + 1;
-//         struct list_head *node = l;
-//         for(int j=0; j<index; j++)
-//             node = node->next;
+void shuffle(struct list_head *l, size_t size)
+{
+    if (size < 2)
+        return;
+    for (size_t i = size; i > 0; i--) {
+        size_t index = rand() % i + 1;
+        struct list_head *node = l;
+        for (int j = 0; j < index; j++)
+            node = node->next;
+        list_move_tail(node, l);
+    }
+}
+bool do_shuffle(int argc, char *argv[])
+{
+    if (argc != 1) {
+        report(1, "%s takes no arguments", argv[0]);
+        return false;
+    }
 
-//     }
-//     return true;
-// }
-// bool do_shuffle(int argc, char *argv[]){
-//     return (bool) printf("%d\n", rand()%8 + 1);
-// }
+    if (!l_meta.l)
+        report(3, "Warning: Try to access null queue");
+    error_check();
 
-// bool do_linux_merge_sort(int argc, char *argv[]){
-//     return true;
-// }
+    set_noallocate_mode(true);
+    if (exception_setup(true))
+        shuffle(l_meta.l, l_meta.size);
+    exception_cancel();
+    set_noallocate_mode(false);
+
+    show_queue(0);
+    return !error_check();
+}
+
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
+int cmp(struct list_head *a, struct list_head *b)
+{
+    element_t *q_a = list_entry(a, element_t, list);
+    element_t *q_b = list_entry(b, element_t, list);
+    if (!strcmp(q_a->value, q_b->value))
+        return 0;
+    return strcmp(q_a->value, q_b->value) < 0 ? -1 : 1;
+}
+static struct list_head *merge(struct list_head *a, struct list_head *b)
+{
+    struct list_head *head = NULL, **tail = &head;
+
+    for (;;) {
+        /* if equal, take 'a' -- important for sort stability */
+        if (cmp(a, b) <= 0) {
+            *tail = a;
+            tail = &a->next;
+            a = a->next;
+            if (!a) {
+                *tail = b;
+                break;
+            }
+        } else {
+            *tail = b;
+            tail = &b->next;
+            b = b->next;
+            if (!b) {
+                *tail = a;
+                break;
+            }
+        }
+    }
+    return head;
+}
+static void merge_final(struct list_head *head,
+                        struct list_head *a,
+                        struct list_head *b)
+{
+    struct list_head *tail = head;
+    uint8_t count = 0;
+
+    for (;;) {
+        /* if equal, take 'a' -- important for sort stability */
+        if (cmp(a, b) <= 0) {
+            tail->next = a;
+            a->prev = tail;
+            tail = a;
+            a = a->next;
+            if (!a)
+                break;
+        } else {
+            tail->next = b;
+            b->prev = tail;
+            tail = b;
+            b = b->next;
+            if (!b) {
+                b = a;
+                break;
+            }
+        }
+    }
+
+    /* Finish linking remainder of list b on to tail */
+    tail->next = b;
+    do {
+        if (unlikely(!++count))
+            cmp(b, b);
+        b->prev = tail;
+        tail = b;
+        b = b->next;
+    } while (b);
+
+    /* And the final links to make a circular doubly-linked list */
+    tail->next = head;
+    head->prev = tail;
+}
+void l_sort(struct list_head *head)
+{
+    struct list_head *list = head->next, *pending = NULL;
+    size_t count = 0; /* Count of pending */
+
+    if (list == head->prev) /* Zero or one elements */
+        return;
+
+    /* Convert to a null-terminated singly-linked list. */
+    head->prev->next = NULL;
+
+    do {
+        size_t bits;
+        struct list_head **tail = &pending;
+
+        /* Find the least-significant clear bit in count */
+        for (bits = count; bits & 1; bits >>= 1)
+            tail = &(*tail)->prev;
+        /* Do the indicated merge */
+        if (likely(bits)) {
+            struct list_head *a = *tail, *b = a->prev;
+
+            a = merge(b, a);
+            /* Install the merged result in place of the inputs */
+            a->prev = b->prev;
+            *tail = a;
+        }
+
+        /* Move one element from input list to pending */
+        list->prev = pending;
+        pending = list;
+        list = list->next;
+        pending->next = NULL;
+        count++;
+    } while (list);
+
+    /* End of input; merge together all the pending lists. */
+    list = pending;
+    pending = pending->prev;
+    for (;;) {
+        struct list_head *next = pending->prev;
+
+        if (!next)
+            break;
+        list = merge(pending, list);
+        pending = next;
+    }
+    /* The final merge, rebuilding prev links */
+    merge_final(head, pending, list);
+}
+bool do_linux_merge_sort(int argc, char *argv[])
+{
+    if (argc != 1) {
+        report(1, "%s takes no arguments", argv[0]);
+        return false;
+    }
+
+    if (!l_meta.l)
+        report(3, "Warning: Calling sort on null queue");
+    error_check();
+
+    int cnt = q_size(l_meta.l);
+    if (cnt < 2)
+        report(3, "Warning: Calling sort on single node");
+    error_check();
+
+    set_noallocate_mode(true);
+    if (exception_setup(true)) {
+        clock_t t_begin = clock();
+        l_sort(l_meta.l);
+        clock_t t_end = clock();
+        printf("** Consumed: %f secs\n **",
+               (t_end - t_begin) / (double) (CLOCKS_PER_SEC));
+    }
+
+    exception_cancel();
+    set_noallocate_mode(false);
+
+    bool ok = true;
+    if (l_meta.size) {
+        for (struct list_head *cur_l = l_meta.l->next;
+             cur_l != l_meta.l && --cnt; cur_l = cur_l->next) {
+            /* Ensure each element in ascending order */
+            /* FIXME: add an option to specify sorting order */
+            element_t *item, *next_item;
+            item = list_entry(cur_l, element_t, list);
+            next_item = list_entry(cur_l->next, element_t, list);
+            if (strcasecmp(item->value, next_item->value) > 0) {
+                report(1, "ERROR: Not sorted in ascending order");
+                ok = false;
+                break;
+            }
+        }
+    }
+
+    show_queue(3);
+    return ok && !error_check();
+}
+
+
 
 static void console_init()
 {
@@ -819,8 +1015,9 @@ static void console_init()
     ADD_COMMAND(swap,
                 "                | Swap every two adjacent nodes in queue");
 
-    // add_cmd("hello", do_hello, "                | Print hello message");
-    // add_cmd("shuffle", do_shuffle, "                | Shuffle the list");
+    add_cmd("shuffle", do_shuffle, "                | Shuffle the list");
+    add_cmd("l_sort", do_linux_merge_sort,
+            "                | Sort the list in linux kernel method");
 
     add_param("length", &string_length, "Maximum length of displayed string",
               NULL);

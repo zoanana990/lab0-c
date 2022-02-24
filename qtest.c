@@ -762,6 +762,29 @@ static bool do_show(int argc, char *argv[])
     return show_queue(0);
 }
 
+// bool do_hello(int argc, char *argv[]){
+//     return (bool) printf("Hello World\n");
+// }
+// bool shuffle(struct list_head *l, size_t size){
+//     if(size < 2) return false;
+//     struct list_head *tail = l->prev;
+//     for(size_t i=size; i>0; i--){
+//         size_t index = rand()%i + 1;
+//         struct list_head *node = l;
+//         for(int j=0; j<index; j++)
+//             node = node->next;
+
+//     }
+//     return true;
+// }
+// bool do_shuffle(int argc, char *argv[]){
+//     return (bool) printf("%d\n", rand()%8 + 1);
+// }
+
+// bool do_linux_merge_sort(int argc, char *argv[]){
+//     return true;
+// }
+
 static void console_init()
 {
     ADD_COMMAND(new, "                | Create new queue");
@@ -795,6 +818,10 @@ static void console_init()
         dedup, "                | Delete all nodes that have duplicate string");
     ADD_COMMAND(swap,
                 "                | Swap every two adjacent nodes in queue");
+
+    // add_cmd("hello", do_hello, "                | Print hello message");
+    // add_cmd("shuffle", do_shuffle, "                | Shuffle the list");
+
     add_param("length", &string_length, "Maximum length of displayed string",
               NULL);
     add_param("malloc", &fail_probability, "Malloc failure probability percent",
